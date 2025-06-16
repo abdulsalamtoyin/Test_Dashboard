@@ -25,10 +25,10 @@ from pathlib import Path
 
 @st.cache_data
 def display_lpb_logo_header():
-    Path(".").mkdir(parents=True, exist_ok=True)
+    Path("assets/images").mkdir(parents=True, exist_ok=True)
     
-    if os.path.exists("logo.png"):
-        with open("logo.png", "rb") as f:
+    if os.path.exists("assets/images/lpb_logo.png"):
+        with open("assets/images/lpb_logo.png", "rb") as f:
             logo_b64 = base64.b64encode(f.read()).decode()
         
         st.markdown(f"""
@@ -39,7 +39,7 @@ def display_lpb_logo_header():
         """, unsafe_allow_html=True)
     else:
         display_lpb_logo_header()
-        st.info("💡 Add your logo to logo.png")
+        st.info("💡 Add your logo to assets/images/lpb_logo.png")
 
 # Enhanced AI imports for reliability
 LOCAL_AI_AVAILABLE = False
@@ -128,6 +128,7 @@ st.markdown("""
     .mr4-card {
         background: linear-gradient(135deg, #aeb6bf 0%, #85929e 50%, #aeb6bf 100%);
     }
+
 
     /* Enhanced sidebar */
     .css-1d391kg {
