@@ -27,8 +27,8 @@ from pathlib import Path
 def display_lpb_logo_header():
     Path(".").mkdir(parents=True, exist_ok=True)
     
-    if os.path.exists("lpb_logo.png"):
-        with open("lpb_logo.png", "rb") as f:
+    if os.path.exists("logo.png"):
+        with open("logo.png", "rb") as f:
             logo_b64 = base64.b64encode(f.read()).decode()
         
         st.markdown(f"""
@@ -39,7 +39,7 @@ def display_lpb_logo_header():
         """, unsafe_allow_html=True)
     else:
         display_lpb_logo_header()
-        st.info("💡 Add your logo to lpb_logo.png")
+        st.info("💡 Add your logo to logo.png")
 
 # Enhanced AI imports for reliability
 LOCAL_AI_AVAILABLE = False
