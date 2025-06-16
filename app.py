@@ -1006,8 +1006,8 @@ with st.sidebar.expander("🔬 Analytics Options"):
     analysis_depth = st.selectbox("Analysis Depth:", ["Basic", "Standard", "Advanced", "Expert"])
 
 # Main enhanced dashboard
-display_lpb_logo_header()
-st.markdown("Next-generation genomic visualization with machine learning and predictive analytics")
+st.title("🧬 LPB Advanced Breeding Intelligence")
+st.markdown("Next-generation genomic analysis with machine learning")
 
 # Enhanced program overview with real-time metrics
 if 'breeding_programs' in data:
