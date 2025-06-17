@@ -41,6 +41,217 @@ def display_lpb_logo_header():
         display_lpb_logo_header()
         st.info("💡 Add your logo to assets/images/lpb_logo.png")
 
+
+def generate_dynamic_action_items(data, rag_system=None):
+    """Generate dynamic action items based on actual data"""
+    
+    actions = {
+        'immediate': [],
+        'medium_term': [],
+        'long_term': []
+    }
+    
+    # Analyze each program
+    for program in ['MR1', 'MR2', 'MR3', 'MR4']:
+        if 'samples' in data:
+            program_data = data['samples'][data['samples']['breeding_program'] == program]
+            
+            if len(program_data) > 0:
+                avg_selection = program_data['selection_index'].mean()
+                line_count = len(program_data)
+                elite_count = len(program_data[program_data['development_stage'] == 'Elite'])
+                
+                # Generate actions based on actual performance
+                if avg_selection < 95:
+                    actions['immediate'].append({
+                        'text': f"Review {program} selection criteria and breeding strategy",
+                        'reason': f"Selection index ({avg_selection:.1f}) below target",
+                        'program': program
+                    })
+                
+                if elite_count < 5:
+                    actions['immediate'].append({
+                        'text': f"Accelerate {program} elite line development pipeline",
+                        'reason': f"Only {elite_count} elite lines available",
+                        'program': program
+                    })
+                
+                if line_count < 50:
+                    actions['medium_term'].append({
+                        'text': f"Expand {program} breeding population size",
+                        'reason': f"Program has only {line_count} active lines",
+                        'program': program
+                    })
+                
+                # Query RAG system if available
+                if rag_system:
+                    try:
+                        query = f"What breeding improvements are needed for {program} program?"
+                        rag_response = rag_system.get_breeding_response(query, data)
+                        # Extract actionable items (simplified)
+                        if "drought" in rag_response.lower() and program == "MR3":
+                            actions['immediate'].append({
+                                'text': f"Implement advanced drought screening for {program}",
+                                'reason': "RAG system identifies drought tolerance gaps",
+                                'program': program
+                            })
+                    except:
+                        pass
+    
+    # Add some long-term strategic actions
+    actions['long_term'] = [
+        {'text': 'Implement gene editing capabilities', 'reason': 'Technology advancement opportunity', 'program': 'All'},
+        {'text': 'Expand climate adaptation research', 'reason': 'Climate change preparedness', 'program': 'MR3'},
+        {'text': 'Develop premium market partnerships', 'reason': 'Value chain optimization', 'program': 'MR4'}
+    ]
+    
+    return actions
+    
+    
+def generate_dynamic_action_items_simple(data):
+    """Generate actions based on actual data analysis"""
+    
+    actions = {
+        'immediate': [],
+        'medium_term': [],
+        'long_term': []
+    }
+    
+    # Analyze each program
+    for program in ['MR1', 'MR2', 'MR3', 'MR4']:
+        if 'samples' in data:
+            program_data = data['samples'][data['samples']['breeding_program'] == program]
+            
+            if len(program_data) > 0:
+                avg_selection = program_data['selection_index'].mean()
+                line_count = len(program_data)
+                elite_count = len(program_data[program_data['development_stage'] == 'Elite'])
+                recent_count = len(program_data[program_data['year'] >= 2022])
+                
+                # Generate actions based on actual performance
+                if avg_selection < 95:
+                    actions['immediate'].append({
+                        'text': f"Review {program} selection criteria and breeding strategy",
+                        'reason': f"Selection index ({avg_selection:.1f}) below target (95+)",
+                        'program': program
+                    })
+                
+                if elite_count < 5:
+                    actions['immediate'].append({
+                        'text': f"Accelerate {program} elite line development pipeline",
+                        'reason': f"Only {elite_count} elite lines vs target of 5+",
+                        'program': program
+                    })
+                
+                if line_count < 50:
+                    actions['immediate'].append({
+                        'text': f"Expand {program} breeding population size",
+                        'reason': f"Program has only {line_count} active lines",
+                        'program': program
+                    })
+                
+                if recent_count < line_count * 0.3:
+                    actions['immediate'].append({
+                        'text': f"Increase recent breeding activity in {program}",
+                        'reason': f"Only {recent_count} lines from recent years (2022+)",
+                        'program': program
+                    })
+    
+    return actions
+    
+def display_dynamic_action_items_working(data):
+    """Working dynamic action items - no external dependencies"""
+    
+    st.subheader("⚡ Dynamic Priority Action Items")
+    st.info("📊 **Data-Driven**: Based on your actual breeding program performance analysis")
+    
+    # Analyze programs and generate actions
+    immediate_actions = []
+    insights = []
+    
+    # Check each program performance
+    for program in ['MR1', 'MR2', 'MR3', 'MR4']:
+        if 'samples' in data:
+            program_data = data['samples'][data['samples']['breeding_program'] == program]
+            
+            if len(program_data) > 0:
+                avg_selection = program_data['selection_index'].mean()
+                line_count = len(program_data)
+                elite_count = len(program_data[program_data['development_stage'] == 'Elite'])
+                
+                # Program-specific analysis
+                program_info = data['breeding_programs'][program]
+                
+                insights.append(f"**{program}**: {line_count} lines, {elite_count} elite, avg index {avg_selection:.1f}")
+                
+                # Generate specific actions based on data
+                if avg_selection < 95:
+                    immediate_actions.append(f"🎯 Review {program} selection strategy (current index: {avg_selection:.1f})")
+                
+                if elite_count < 5:
+                    immediate_actions.append(f"🚀 Accelerate {program} elite line development ({elite_count} current elite lines)")
+                
+                if avg_selection > 115:
+                    immediate_actions.append(f"✅ Advance top {program} performers to next stage (excellent index: {avg_selection:.1f})")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("### 🚀 Immediate Actions (1-3 months)")
+        
+        if immediate_actions:
+            for action in immediate_actions[:4]:
+                st.markdown(f"""
+                <div class="alert-success">
+                <strong>{action}</strong><br>
+                <small>Based on current performance data analysis</small>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="alert-success">
+            <strong>✅ All programs performing within target ranges</strong><br>
+            <small>Continue current breeding strategies</small>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("### 📈 Medium-term (3-12 months)")
+        st.markdown("""
+        <div class="alert-warning">
+        <strong>🔄 Optimize cross-program breeding strategies</strong><br>
+        <small>Leverage high-performing lines across programs</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div class="alert-warning">
+        <strong>📊 Implement advanced phenotyping</strong><br>
+        <small>Enhance trait measurement accuracy and efficiency</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown("### 🔮 Long-term (1-3 years)")
+        st.markdown("""
+        <div class="alert-warning">
+        <strong>🧬 Integrate genomic selection technologies</strong><br>
+        <small>Accelerate breeding cycle and improve precision</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div class="alert-warning">
+        <strong>🌍 Expand to new market segments</strong><br>
+        <small>Leverage successful program outcomes</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Show analysis details
+    with st.expander("📊 Program Analysis Details", expanded=False):
+        for insight in insights:
+            st.markdown(insight)
+
 # Enhanced AI imports for reliability
 LOCAL_AI_AVAILABLE = False
 MINIMAL_AI_AVAILABLE = False
@@ -1162,48 +1373,7 @@ with tab1:
                 """, unsafe_allow_html=True)
     
     # Action items and recommendations
-    st.subheader("⚡ Priority Action Items")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        <div class="alert-success">
-        <h5>🚀 Immediate Actions (1-3 months)</h5>
-        <ul>
-        <li>✅ Increase MR4 elite line development</li>
-        <li>🔬 Expand MR3 drought screening</li>
-        <li>📊 Implement genomic selection in MR1</li>
-        <li>💰 Secure premium market contracts</li>
-        </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div class="alert-warning">
-        <h5>📈 Medium-term (3-12 months)</h5>
-        <ul>
-        <li>🌱 Launch cross-program breeding</li>
-        <li>🌡️ Climate adaptation trials</li>
-        <li>📊 Advanced phenotyping platform</li>
-        <li>🤝 Strategic partnerships</li>
-        </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("""
-        <div class="alert-warning">
-        <h5>🔮 Long-term (1-3 years)</h5>
-        <ul>
-        <li>🧬 Gene editing integration</li>
-        <li>🌍 Global market expansion</li>
-        <li>🤖 AI-driven breeding</li>
-        <li>♻️ Sustainability certification</li>
-        </ul>
-        </div>
-        """, unsafe_allow_html=True)
+    display_dynamic_action_items_working(data)
 
 with tab2:
     st.header("📊 Advanced Analytics & Machine Learning")
