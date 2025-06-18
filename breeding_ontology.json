@@ -1,0 +1,33 @@
+// knowledge_base/breeding_ontology.json
+{
+  "traits": {
+    "yield": {
+      "definition": "Grain yield per hectare",
+      "units": "t/ha",
+      "target_range": "40-65",
+      "importance": "critical",
+      "heritability": "medium"
+    },
+    "disease_resistance": {
+      "definition": "Resistance to fungal and bacterial diseases",
+      "scale": "1-9",
+      "target_value": ">7",
+      "importance": "high",
+      "heritability": "high"
+    }
+  },
+  "programs": {
+    "MR1": {
+      "focus": "High rainfall adaptation",
+      "target_environment": ">600mm rainfall",
+      "key_traits": ["disease_resistance", "lodging_resistance", "yield"],
+      "selection_intensity": "moderate"
+    }
+  },
+  "relationships": {
+    "trait_correlations": {
+      "yield_protein": -0.3,
+      "yield_test_weight": 0.2
+    }
+  }
+}

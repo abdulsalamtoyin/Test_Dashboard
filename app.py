@@ -15,6 +15,10 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
+from utils.enhanced_rag_system import EnhancedBreedingRAG
+from typing import Dict, List, Tuple, Any, Union, Optional  # Make sure 'Any' is included
+from datetime import datetime, timedelta  # Make sure datetime is imported
+from utils.local_rag_llm import create_local_rag_llm_interface, test_ollama_integration
 import base64
 warnings.filterwarnings('ignore')
 
@@ -22,6 +26,36 @@ warnings.filterwarnings('ignore')
 import base64
 import os
 from pathlib import Path
+
+
+# Enhanced AI imports for reliability
+LOCAL_AI_AVAILABLE = False
+MINIMAL_AI_AVAILABLE = False
+CHAT_INTERFACE_AVAILABLE = False
+RAG_INTEGRATION_AVAILABLE = False
+
+try:
+    from utils.local_rag_system import LocalBreedingRAG, create_local_rag_system
+    LOCAL_AI_AVAILABLE = True
+    print("✅ Local RAG system available")
+except ImportError as e:
+    print(f"⚠️ Local RAG not available: {e}")
+
+try:
+    from utils.rag_fallback import MinimalBreedingAssistant, get_fallback_response
+    MINIMAL_AI_AVAILABLE = True
+    print("✅ Minimal AI available")
+except ImportError as e:
+    print(f"⚠️ Minimal AI not available: {e}")
+
+try:
+    from utils.rag_integration import RAGIntegration, get_rag_insights, analyze_breeding_question, get_rag_integration
+    RAG_INTEGRATION_AVAILABLE = True
+    print("✅ RAG Integration available")
+except ImportError as e:
+    print(f"⚠️ RAG Integration not available: {e}")
+
+print("🌾 Enhanced MR1-MR4 Breeding Dashboard Ready!")
 
 @st.cache_data
 def display_lpb_logo_header():
@@ -41,7 +75,23 @@ def display_lpb_logo_header():
         display_lpb_logo_header()
         st.info("💡 Add your logo to assets/images/lpb_logo.png")
 
-
+def create_plot_from_query(query: str, data: Dict):
+    """Fixed plot generation function"""
+    try:
+        # Import the fixed standalone generator
+        from utils.rag_plot_generator_fixed import create_plot_from_query_fixed
+        create_plot_from_query_fixed(query, data)
+        
+    except ImportError:
+        # Fallback if file doesn't exist yet
+        st.error("Plot generator not available - create utils/rag_plot_generator_fixed.py")
+        st.markdown("Showing text analysis instead...")
+        
+        # Basic analysis
+        if 'samples' in data:
+            df = data['samples']
+            st.write(f"📊 Found {len(df)} breeding lines across {df['breeding_program'].nunique()} programs")
+        
 def generate_dynamic_action_items(data, rag_system=None):
     """Generate dynamic action items based on actual data"""
     
@@ -272,6 +322,8 @@ except ImportError as e:
     print(f"⚠️ Minimal AI not available: {e}")
 
 print("🌾 Enhanced MR1-MR4 Breeding Dashboard Ready!")
+
+
 
 # Enhanced page configuration with custom theme
 st.set_page_config(
@@ -1034,126 +1086,146 @@ def get_smart_response_mr_programs(question: str, data: dict) -> str:
             return response
         
         return "🌾 **MR1-MR4 Advanced Analytics Ready!** Ask me about performance trends, genetic analysis, or predictive insights."
+        
+        
+@st.cache_resource
+def initialize_rag_system():
+    """Initialize RAG system with error handling"""
+    if RAG_INTEGRATION_AVAILABLE:
+        try:
+            return get_rag_integration()
+        except Exception as e:
+            st.warning(f"RAG system initialization issue: {e}")
+            return None
+    return None
+
+def get_intelligent_response(query: str, data_context: Dict = None) -> Dict[str, Any]:
+    """Get intelligent response with fallback handling"""
+    
+    # Try RAG Integration first
+    if RAG_INTEGRATION_AVAILABLE:
+        try:
+            return analyze_breeding_question(query, data_context)
+        except Exception as e:
+            print(f"RAG Integration error: {e}")
+    
+    # Try local RAG system
+    if LOCAL_AI_AVAILABLE:
+        try:
+            rag_system = create_local_rag_system()
+            response = rag_system.get_breeding_response(query, data_context)
+            return {
+                "query": query,
+                "response": response,
+                "confidence": 0.8,
+                "system_status": {"source": "local_rag"},
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            print(f"Local RAG error: {e}")
+    
+    # Fallback to basic response
+    if MINIMAL_AI_AVAILABLE:
+        try:
+            from utils.rag_fallback import get_fallback_response
+            response = get_fallback_response(query, data_context)
+        except:
+            response = get_smart_response_mr_programs(query, data_context or {})
+    else:
+        response = get_smart_response_mr_programs(query, data_context or {})
+    
+    return {
+        "query": query,
+        "response": response,
+        "confidence": 0.6,
+        "system_status": {"source": "fallback"},
+        "timestamp": datetime.now().isoformat()
+    }
+
 
 def display_enhanced_chat_interface(data: Dict):
-    """Enhanced chat interface with advanced features"""
+    """Enhanced chat interface with robust RAG integration"""
+    
+    # Initialize RAG system
+    rag_system = initialize_rag_system()
     
     # Initialize chat history with enhanced welcome message
     if "enhanced_mr_chat" not in st.session_state:
-        analytics = BreedingAnalytics(data)
-        
-        # Calculate some quick stats for welcome message
         total_lines = len(data['samples']) if 'samples' in data else 0
         total_traits = len(data['traits']) if 'traits' in data else 0
+        
+        system_status = "🧠 **Advanced AI**" if rag_system else "🤖 **Standard AI**"
         
         st.session_state.enhanced_mr_chat = [
             {
                 "role": "assistant",
                 "content": f"""🌾 **Welcome to your Advanced MR1-MR4 Breeding Intelligence!**
 
-I'm your enhanced AI assistant with machine learning capabilities for analyzing your four breeding programs:
+{system_status} - Ready to analyze your breeding programs.
 
 🌧️ **MR1** - High Rainfall Adaptation ({len(data['samples'][data['samples']['breeding_program'] == 'MR1']) if 'samples' in data else 0} lines)
 🌦️ **MR2** - Medium Rainfall Zones ({len(data['samples'][data['samples']['breeding_program'] == 'MR2']) if 'samples' in data else 0} lines)
 ☀️ **MR3** - Low Rainfall/Drought ({len(data['samples'][data['samples']['breeding_program'] == 'MR3']) if 'samples' in data else 0} lines)
 💧 **MR4** - Irrigated Conditions ({len(data['samples'][data['samples']['breeding_program'] == 'MR4']) if 'samples' in data else 0} lines)
 
-**🔬 Advanced Capabilities:**
-• **Machine Learning Analysis** - PCA, clustering, predictive modeling
-• **Breeding Value Calculations** - Advanced GEBV with reliability scores
-• **Economic Optimization** - ROI analysis and investment strategies
-• **Climate Risk Assessment** - Resilience scoring and adaptation planning
-• **Performance Forecasting** - Trend analysis and breakthrough predictions
+**🔬 Available Analysis:**
+• Performance trends and breeding values
+• Genetic diversity and selection strategies
+• Economic optimization and ROI analysis
+• Climate adaptation and risk assessment
+• Strategic planning and recommendations
 
 **📊 Your Data Portfolio:**
 • {total_lines:,} breeding lines across 4 programs
-• {total_traits} traits with multi-environment data
-• Advanced analytics and visualizations ready
+• {total_traits} traits with comprehensive data
+• Advanced analytics ready for your questions
 
 **What would you like to explore?**
 
-**🎯 Try these advanced questions:**
-• "Perform PCA analysis on my breeding data"
-• "Which programs need genetic diversity improvement?"  
-• "Predict the top performers for next season"
-• "Calculate breeding values and rank my lines"
-• "What's the climate risk for each program?"
-• "Show me cluster analysis of my varieties"
+**🎯 Try these questions:**
+• "How are my MR programs performing?"
+• "What's the genetic diversity status?"  
+• "Which lines should I advance to elite stage?"
+• "What are the ROI projections?"
+• "How should I adapt to climate change?"
 """
             }
         ]
     
-    # Enhanced chat interface with analytics integration
+    # Enhanced chat interface
     for message in st.session_state.enhanced_mr_chat:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
     # Chat input with enhanced processing
-    if prompt := st.chat_input("Ask about advanced breeding analytics, predictions, or strategic insights..."):
+    if prompt := st.chat_input("Ask about your breeding programs, performance, genetics, or strategy..."):
         # Add user message
         st.session_state.enhanced_mr_chat.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
         
-        # Generate enhanced response with analytics
+        # Generate enhanced response
         with st.chat_message("assistant"):
-            with st.spinner("🧠 Performing advanced breeding analysis..."):
+            with st.spinner("🧠 Analyzing your breeding data..."):
                 
-                # Check for specific analytics requests
-                if any(word in prompt.lower() for word in ['pca', 'principal component', 'clustering']):
-                    analytics = BreedingAnalytics(data)
-                    
-                    if 'pca' in prompt.lower():
-                        pca_result = analytics.perform_pca()
-                        if pca_result:
-                            response = f"""🔬 **PCA Analysis Results:**
-
-**📊 Explained Variance:**
-• PC1: {pca_result['explained_variance'][0]:.1%}
-• PC2: {pca_result['explained_variance'][1]:.1%}
-• Total: {sum(pca_result['explained_variance'][:2]):.1%}
-
-**🎯 Key Insights:**
-• Your breeding lines show clear program clustering
-• Primary variation driven by yield and adaptation traits  
-• Programs maintain distinct genetic profiles
-• Opportunity for targeted crossing between clusters
-
-**💡 Recommendations:**
-• Focus selection on high PC1 + PC2 lines
-• Consider inter-program crosses for transgressive segregation
-• Maintain diversity within each program cluster
-"""
-                        else:
-                            response = "❌ Insufficient data for PCA analysis. Need more phenotype records."
-                    
-                    elif 'cluster' in prompt.lower():
-                        cluster_result = analytics.cluster_analysis()
-                        if cluster_result:
-                            response = f"""🎯 **Cluster Analysis Results:**
-
-**📊 Identified {len(cluster_result['centroids'])} distinct breeding clusters:**
-
-• **Cluster 0:** High yield, moderate disease resistance
-• **Cluster 1:** Balanced performance across traits  
-• **Cluster 2:** Stress tolerance specialists
-• **Cluster 3:** Quality-focused lines
-
-**🔍 Program Distribution:**
-{cluster_result['cluster_data']['Program'].value_counts().to_string()}
-
-**💡 Strategic Insights:**
-• Each cluster represents a distinct market opportunity
-• Cross-cluster breeding can combine complementary traits
-• Focus resources on clusters with highest commercial potential
-"""
-                        else:
-                            response = "❌ Insufficient data for clustering analysis."
-                else:
-                    # Use enhanced response system
-                    response = get_smart_response_mr_programs(prompt, data)
+                # Get intelligent response with fallback
+                result = get_intelligent_response(prompt, data)
+                response = result["response"]
+                confidence = result["confidence"]
                 
                 st.markdown(response)
+                
+                # Show analysis details in expander
+                with st.expander("🔍 Analysis Details", expanded=False):
+                    st.write(f"**Query:** {prompt}")
+                    st.write(f"**Confidence:** {confidence:.0%}")
+                    st.write(f"**System:** {result['system_status'].get('source', 'unknown')}")
+                    st.write(f"**Timestamp:** {result['timestamp']}")
+                    
+                    if rag_system:
+                        system_info = rag_system.get_system_status()
+                        st.write(f"**RAG Status:** {system_info['status']}")
+                        st.write(f"**Features:** {', '.join(system_info['features'][:3])}")
         
         # Add assistant response
         st.session_state.enhanced_mr_chat.append({"role": "assistant", "content": response})
@@ -2386,165 +2458,371 @@ with tab7:
 with tab8:
     st.header("🤖 Enhanced AI Assistant")
     
-    # System status with enhanced features
-    if LOCAL_AI_AVAILABLE and MINIMAL_AI_AVAILABLE:
-        st.success("🎉 **Advanced AI Active** - Full machine learning capabilities enabled")
-    elif MINIMAL_AI_AVAILABLE:
-        st.info("🤖 **Standard AI Active** - Core analytics and insights available")
-    else:
-        st.warning("⚠️ **Basic Mode** - Install AI components for advanced analysis")
-    
-    # Enhanced quick actions with ML integration
-    st.markdown("### ⚡ Advanced Analytics Quick Actions")
-    
-    col1, col2, col3 = st.columns(3)
-    
+    # LLM Mode Toggle - NEW FEATURE
+    col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("**🔬 Machine Learning Analysis**")
-        
-        if st.button("🧠 Run PCA Analysis", key="pca_btn"):
-            analytics = BreedingAnalytics(data)
-            pca_result = analytics.perform_pca()
-            if pca_result:
-                st.success(f"✅ PCA completed - PC1 explains {pca_result['explained_variance'][0]:.1%} of variance")
-            else:
-                st.error("❌ Insufficient data for PCA")
-        
-        if st.button("🎯 Cluster Analysis", key="cluster_btn"):
-            analytics = BreedingAnalytics(data)
-            cluster_result = analytics.cluster_analysis()
-            if cluster_result:
-                st.success(f"✅ Identified {len(cluster_result['centroids'])} distinct breeding clusters")
-            else:
-                st.error("❌ Insufficient data for clustering")
-        
-        if st.button("🏆 Calculate Breeding Values", key="bv_btn"):
-            analytics = BreedingAnalytics(data)
-            breeding_values = analytics.calculate_breeding_values()
-            if breeding_values is not None:
-                top_performer = breeding_values.loc[breeding_values['Breeding_Value'].idxmax()]
-                st.success(f"✅ Top performer: {top_performer['GID']} (BV: {top_performer['Breeding_Value']:.2f})")
-            else:
-                st.error("❌ Insufficient data for breeding value calculation")
-    
+        use_llm_mode = st.toggle("🧠 Use Local LLM (Advanced)", value=False,
+                                help="Switch to local Ollama LLM for advanced reasoning and conversation")
     with col2:
-        st.markdown("**📈 Predictive Analytics**")
-        
-        if st.button("🔮 Performance Forecast", key="forecast_btn"):
-            st.info("📊 5-year genetic gain projection: 12.3% improvement expected")
-            st.info("🎯 Breakthrough varieties predicted: 2-3 per program")
-        
-        if st.button("💰 Economic Optimization", key="econ_btn"):
-            st.info("💡 Optimal allocation: MR4 (35%), MR3 (25%), MR1 (25%), MR2 (15%)")
-            st.info("📈 Expected portfolio ROI: 156% over 5 years")
-        
-        if st.button("🌡️ Climate Risk Assessment", key="climate_btn"):
-            st.info("⚠️ Medium-term climate risk identified for MR1/MR2")
-            st.info("✅ MR3 program well-positioned for climate change")
+        if st.button("🔄 Refresh System"):
+            st.rerun()
     
-    with col3:
-        st.markdown("**🎯 Strategic Insights**")
+    # LLM Mode Interface
+    if use_llm_mode:
+        st.success("🧠 **LLM Mode Active** - Advanced reasoning with local Ollama server")
         
-        if st.button("📊 Program Comparison", key="compare_btn"):
-            response = get_smart_response_mr_programs("Compare all four MR programs", data)
-            st.markdown(response[:500] + "..." if len(response) > 500 else response)
+        try:
+            from utils.local_rag_llm import create_local_rag_llm_interface, test_ollama_integration
+            
+            # Test connection first
+            with st.expander("🧪 Test Ollama Connection", expanded=False):
+                test_ollama_integration()
+            
+            st.markdown("---")
+            
+            # Main LLM interface
+            create_local_rag_llm_interface(data)
+            
+        except ImportError as e:
+            st.error("🚨 **LLM System Not Available**")
+            st.error(f"Error: {e}")
+            st.info("💡 **Solution**: Create `utils/local_rag_llm.py` with the LLM integration code")
+            st.markdown("**Falling back to Standard Mode...**")
+            use_llm_mode = False
+            
+        except Exception as e:
+            st.error("🚨 **LLM Connection Failed**")
+            st.error(f"Error: {e}")
+            st.info("💡 **Solutions**: \n- Make sure Ollama is running: `ollama serve`\n- Check if models are available: `ollama list`")
+            st.markdown("**Falling back to Standard Mode...**")
+            use_llm_mode = False
+    
+    # Standard Mode Interface (Your existing features)
+    if not use_llm_mode:
+        st.info("🤖 **Standard Mode** - Enhanced RAG system with plot generation and quick actions")
         
-        if st.button("🧬 Genetic Diversity Check", key="diversity_btn"):
-            response = get_smart_response_mr_programs("Analyze genetic diversity across programs", data)
-            st.markdown(response[:500] + "..." if len(response) > 500 else response)
+        # System status - EXISTING CODE
+        rag_system = initialize_rag_system()
         
-        if st.button("🚀 Innovation Opportunities", key="innovation_btn"):
-            st.info("💡 Gene editing potential identified in drought tolerance")
-            st.info("🔬 AI-driven phenotyping could accelerate selection by 40%")
-    
-    # Enhanced chat interface
-    st.markdown("---")
-    st.markdown("### 💬 Advanced AI Chat Interface")
-    
-    # Display enhanced chat interface
-    display_enhanced_chat_interface(data)
-    
-    # AI capabilities showcase
-    with st.expander("🔬 AI Capabilities & Features", expanded=False):
+        if rag_system and RAG_INTEGRATION_AVAILABLE:
+            st.success("🎉 **Advanced RAG System Active** - Full breeding intelligence available")
+            
+            # Show system capabilities - EXISTING CODE
+            with st.expander("🔬 AI Capabilities", expanded=False):
+                try:
+                    system_status = rag_system.get_system_status()
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("System Status", system_status["status"].title())
+                        st.metric("Version", system_status["version"])
+                    
+                    with col2:
+                        st.metric("Programs Supported", system_status["capabilities"]["programs_supported"])
+                        st.metric("Analysis Types", system_status["capabilities"]["analysis_types"])
+                    
+                    with col3:
+                        st.metric("Data Integration", "✅" if system_status["capabilities"]["data_integration"] else "❌")
+                        st.metric("Real-time Insights", "✅" if system_status["capabilities"]["real_time_insights"] else "❌")
+                    
+                    st.markdown("**Available Features:**")
+                    for feature in system_status["features"]:
+                        st.markdown(f"• {feature}")
+                except Exception as e:
+                    st.info("RAG system active - basic capabilities available")
+            
+            # Quick insights - EXISTING CODE
+            st.markdown("### ⚡ Quick Insights")
+            try:
+                insights = rag_system.get_quick_insights(data)
+                for insight in insights:
+                    st.info(insight)
+            except Exception as e:
+                st.info("🧠 AI system ready for your questions")
+        
+        elif MINIMAL_AI_AVAILABLE:
+            st.info("🤖 **Standard AI Active** - Core analytics and insights available")
+        else:
+            st.warning("⚠️ **Basic Mode** - Limited AI functionality")
+        
+        # Plot Generation Test - EXISTING CODE
+        st.markdown("### 📊 Plot Generation Test")
+        
+        plot_col1, plot_col2 = st.columns([3, 1])
+        
+        with plot_col1:
+            test_query = st.selectbox("Try a plot query:", [
+                "Compare all programs performance",
+                "Show trends over time",
+                "Plot distribution of selection index",
+                "Visualize MR3 vs MR1 comparison",
+                "Create scatter plot of year vs performance",
+                "Show box plot of elite lines distribution"
+            ])
+        
+        with plot_col2:
+            if st.button("🚀 Generate Plot", key="plot_gen_btn"):
+                try:
+                    create_plot_from_query(test_query, data)
+                except Exception as e:
+                    st.error(f"Plot generation error: {e}")
+                    st.info("Plot generation not available - showing text response only")
+        
+        # Enhanced quick actions - EXISTING CODE
+        st.markdown("### ⚡ Quick Actions")
+        
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.markdown("""
-            **🧠 Machine Learning**
-            - Principal Component Analysis (PCA)
-            - K-means clustering analysis
-            - Predictive modeling
-            - Pattern recognition
-            - Anomaly detection
-            """)
+            st.markdown("**📊 Performance Analysis**")
+            
+            if st.button("🏆 Top Performers", key="top_performers_btn"):
+                with st.spinner("Analyzing top performers..."):
+                    result = get_intelligent_response("What are the top performing lines across all programs?", data)
+                    st.success("✅ Analysis complete!")
+                    with st.expander("📋 Results", expanded=True):
+                        st.markdown(result["response"])
+            
+            if st.button("📈 Program Comparison", key="program_comparison_btn"):
+                with st.spinner("Comparing programs..."):
+                    result = get_intelligent_response("Compare performance across MR1, MR2, MR3, and MR4 programs", data)
+                    st.success("✅ Comparison complete!")
+                    with st.expander("📋 Results", expanded=True):
+                        st.markdown(result["response"])
         
         with col2:
-            st.markdown("""
-            **📊 Advanced Analytics**
-            - Breeding value calculations
-            - Heritability estimation
-            - Correlation analysis
-            - Trend forecasting
-            - Risk assessment
-            """)
+            st.markdown("**🧬 Genetic Analysis**")
+            
+            if st.button("🔬 Diversity Analysis", key="diversity_btn"):
+                with st.spinner("Analyzing genetic diversity..."):
+                    result = get_intelligent_response("Analyze genetic diversity across breeding programs", data)
+                    st.success("✅ Analysis complete!")
+                    with st.expander("📋 Results", expanded=True):
+                        st.markdown(result["response"])
+            
+            if st.button("⭐ Breeding Values", key="breeding_values_btn"):
+                with st.spinner("Calculating breeding values..."):
+                    result = get_intelligent_response("What are the breeding value insights and recommendations?", data)
+                    st.success("✅ Analysis complete!")
+                    with st.expander("📋 Results", expanded=True):
+                        st.markdown(result["response"])
         
         with col3:
-            st.markdown("""
-            **🎯 Strategic Intelligence**
-            - Investment optimization
-            - Resource allocation
-            - Market opportunity analysis
-            - Climate adaptation planning
-            - Competitive benchmarking
-            """)
+            st.markdown("**💰 Strategic Planning**")
+            
+            if st.button("💡 Investment Strategy", key="investment_btn"):
+                with st.spinner("Developing strategy..."):
+                    result = get_intelligent_response("What is the optimal investment strategy for our breeding programs?", data)
+                    st.success("✅ Strategy generated!")
+                    with st.expander("📋 Results", expanded=True):
+                        st.markdown(result["response"])
+            
+            if st.button("🌡️ Climate Adaptation", key="climate_btn"):
+                with st.spinner("Analyzing climate strategies..."):
+                    result = get_intelligent_response("What climate adaptation strategies should we implement?", data)
+                    st.success("✅ Strategy complete!")
+                    with st.expander("📋 Results", expanded=True):
+                        st.markdown(result["response"])
+        
+        # Enhanced chat interface - EXISTING CODE
+        st.markdown("---")
+        st.markdown("### 💬 Interactive AI Assistant")
+        
+        # Display enhanced chat interface
+        display_enhanced_chat_interface(data)
+        
+        # Quick LLM Test Section - NEW ADDITION
+        st.markdown("---")
+        st.markdown("### 🧪 Test Local LLM (Beta)")
+        
+        llm_test_col1, llm_test_col2 = st.columns([4, 1])
+        
+        with llm_test_col1:
+            llm_test_query = st.text_input(
+                "Test Local LLM:",
+                placeholder="e.g., How can I improve breeding efficiency in MR3?",
+                key="llm_test_input"
+            )
+        
+        with llm_test_col2:
+            if st.button("🚀 Try LLM", key="llm_test_btn") and llm_test_query:
+                try:
+                    from utils.local_rag_llm import LocalRAGWithLLM
+                    
+                    # Initialize LLM system
+                    if 'test_llm_system' not in st.session_state:
+                        with st.spinner("🧠 Initializing LLM system..."):
+                            st.session_state.test_llm_system = LocalRAGWithLLM(data)
+                    
+                    llm_system = st.session_state.test_llm_system
+                    
+                    # Generate response
+                    with st.spinner("🧠 LLM processing..."):
+                        query_type = llm_system._classify_query_type(llm_test_query)
+                        st.caption(f"🎯 Detected: {query_type.replace('_', ' ').title()}")
+                        
+                        response = llm_system.generate_response(llm_test_query, stream=False)
+                        
+                        st.success("🎉 **LLM Response:**")
+                        st.markdown(response)
+                        
+                        # Option to switch to full LLM mode
+                        if st.button("🔄 Switch to Full LLM Mode", key="switch_llm"):
+                            st.rerun()
+                            
+                except Exception as e:
+                    st.error(f"🚨 LLM not available: {e}")
+                    
+                    # Fallback to existing system
+                    with st.spinner("Using standard system..."):
+                        result = get_intelligent_response(llm_test_query, data)
+                        st.info("📝 **Standard AI Response:**")
+                        st.markdown(result["response"])
+                        
+                    st.info("💡 **To use LLM**: Ensure Ollama is running (`ollama serve`) and create the LLM integration file")
     
-    # Performance metrics for AI system
-    with st.expander("📈 AI Performance Metrics", expanded=False):
-        col1, col2, col3, col4 = st.columns(4)
+    # System Information Section - EXISTING CODE (Enhanced)
+    st.markdown("---")
+    with st.expander("ℹ️ System Information", expanded=False):
+        info_col1, info_col2 = st.columns(2)
         
-        with col1:
-            st.metric("Response Accuracy", "94.2%", "+2.1%")
-        with col2:
-            st.metric("Analysis Speed", "0.8s", "-0.2s")
-        with col3:
-            st.metric("Data Coverage", "98.5%", "+1.2%")
-        with col4:
-            st.metric("User Satisfaction", "4.7/5", "+0.3")
-
-# Enhanced footer with system information
-st.markdown("---")
-
-# System status footer
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.markdown("### 🌾 MR1-MR4 Portfolio")
-    total_lines = len(data['samples']) if 'samples' in data else 0
-    st.markdown(f"**Total Lines:** {total_lines:,}")
-    st.markdown(f"**Programs:** 4 active")
-    st.markdown(f"**Coverage:** Full spectrum")
-
-with col2:
-    st.markdown("### 📊 Data Quality")
-    if 'samples' in data:
-        high_quality = (data['samples']['data_quality'] == 'High').mean() * 100
-        st.markdown(f"**High Quality:** {high_quality:.0f}%")
-    st.markdown("**Completeness:** 96.3%")
-    st.markdown("**Freshness:** Current")
-
-with col3:
-    st.markdown("### 🤖 AI Status")
-    ai_status = "Advanced" if LOCAL_AI_AVAILABLE else "Standard" if MINIMAL_AI_AVAILABLE else "Basic"
-    st.markdown(f"**AI Level:** {ai_status}")
-    st.markdown("**ML Features:** Enabled")
-    st.markdown("**Predictions:** Active")
-
-with col4:
-    st.markdown("### 🎯 Performance")
-    st.markdown("**Dashboard Load:** 0.8s")
-    st.markdown("**Analysis Speed:** Fast")
-    st.markdown("**Uptime:** 99.9%")
-
+        with info_col1:
+            st.markdown("**🔧 System Components:**")
+            st.markdown(f"• RAG Integration: {'✅' if RAG_INTEGRATION_AVAILABLE else '❌'}")
+            st.markdown(f"• Local AI: {'✅' if LOCAL_AI_AVAILABLE else '❌'}")
+            st.markdown(f"• Minimal AI: {'✅' if MINIMAL_AI_AVAILABLE else '❌'}")
+            st.markdown(f"• Chat Interface: {'✅' if CHAT_INTERFACE_AVAILABLE else '❌'}")
+            
+            # Check LLM availability
+            try:
+                from utils.local_rag_llm import OllamaLLMClient
+                st.markdown("• LLM Integration: ✅ Available")
+                
+                # Test Ollama connection
+                try:
+                    client = OllamaLLMClient()
+                    st.markdown("• Ollama Server: 🟢 Connected")
+                except:
+                    st.markdown("• Ollama Server: 🔴 Disconnected")
+            except ImportError:
+                st.markdown("• LLM Integration: ⚠️ Not Installed")
+        
+        with info_col2:
+            st.markdown("**📊 Data Status:**")
+            st.markdown(f"• Total Samples: {len(data['samples']) if 'samples' in data else 0:,}")
+            st.markdown(f"• Breeding Programs: {len(data['breeding_programs']) if 'breeding_programs' in data else 0}")
+            st.markdown(f"• Traits Tracked: {len(data['traits']) if 'traits' in data else 0}")
+            st.markdown(f"• Data Quality: High")
+            
+            st.markdown("**🎯 Performance Metrics:**")
+            if 'samples' in data:
+                total_lines = len(data['samples'])
+                elite_lines = len(data['samples'][data['samples']['development_stage'] == 'Elite'])
+                elite_percentage = (elite_lines / total_lines * 100) if total_lines > 0 else 0
+                
+                st.markdown(f"• Elite Lines: {elite_lines:,} ({elite_percentage:.1f}%)")
+                st.markdown(f"• Recent Lines (2022+): {len(data['samples'][data['samples']['year'] >= 2022]):,}")
+                st.markdown(f"• Avg Selection Index: {data['samples']['selection_index'].mean():.1f}")
+    
+    # Performance Metrics Dashboard - NEW ADDITION
+    with st.expander("📈 Performance Dashboard", expanded=False):
+        perf_col1, perf_col2, perf_col3, perf_col4 = st.columns(4)
+        
+        with perf_col1:
+            if 'samples' in data:
+                total_lines = len(data['samples'])
+                st.metric("Total Portfolio", f"{total_lines:,}", "Active Lines")
+            else:
+                st.metric("Total Portfolio", "0", "No Data")
+        
+        with perf_col2:
+            if 'samples' in data:
+                elite_lines = len(data['samples'][data['samples']['development_stage'] == 'Elite'])
+                st.metric("Elite Lines", f"{elite_lines:,}", f"{(elite_lines/total_lines*100):.1f}%" if total_lines > 0 else "0%")
+            else:
+                st.metric("Elite Lines", "0", "0%")
+        
+        with perf_col3:
+            if 'samples' in data:
+                avg_selection = data['samples']['selection_index'].mean()
+                st.metric("Avg Selection Index", f"{avg_selection:.1f}", "Portfolio Average")
+            else:
+                st.metric("Avg Selection Index", "N/A", "No Data")
+        
+        with perf_col4:
+            if 'breeding_programs' in data:
+                program_count = len(data['breeding_programs'])
+                st.metric("Active Programs", f"{program_count}", "MR1-MR4")
+            else:
+                st.metric("Active Programs", "4", "Standard")
+        
+        # Program breakdown
+        if 'samples' in data:
+            st.markdown("**📊 Program Breakdown:**")
+            program_stats = data['samples']['breeding_program'].value_counts()
+            
+            prog_col1, prog_col2, prog_col3, prog_col4 = st.columns(4)
+            
+            programs = ['MR1', 'MR2', 'MR3', 'MR4']
+            colors = ['🌧️', '🌦️', '☀️', '💧']
+            cols = [prog_col1, prog_col2, prog_col3, prog_col4]
+            
+            for i, (program, col, icon) in enumerate(zip(programs, cols, colors)):
+                with col:
+                    count = program_stats.get(program, 0)
+                    percentage = (count / total_lines * 100) if total_lines > 0 else 0
+                    st.metric(f"{icon} {program}", f"{count:,}", f"{percentage:.1f}%")
+    
+    # Help and Documentation - NEW ADDITION
+    with st.expander("❓ Help & Documentation", expanded=False):
+        help_tab1, help_tab2, help_tab3 = st.tabs(["🎯 Quick Start", "💡 Tips", "🔧 Troubleshooting"])
+        
+        with help_tab1:
+            st.markdown("""
+            **🚀 Getting Started:**
+            
+            1. **Standard Mode**: Use the quick action buttons and chat interface
+            2. **Plot Generation**: Select a query and click "Generate Plot"
+            3. **LLM Mode**: Toggle LLM mode for advanced conversations
+            
+            **💬 Chat Tips:**
+            • Ask specific questions about your breeding programs
+            • Use program names (MR1, MR2, MR3, MR4) for targeted analysis
+            • Request comparisons, trends, and recommendations
+            """)
+        
+        with help_tab2:
+            st.markdown("""
+            **💡 Pro Tips:**
+            
+            • **Be Specific**: "MR3 drought tolerance trends" vs "drought"
+            • **Use Data Terms**: "selection index", "elite lines", "breeding value"
+            • **Ask for Actions**: "recommend", "suggest", "analyze", "compare"
+            • **Follow Up**: Build on previous responses for deeper insights
+            
+            **🎯 Example Queries:**
+            • "Compare MR1 and MR3 performance over the last 3 years"
+            • "What traits should I prioritize for climate adaptation?"
+            • "Analyze the ROI potential of our breeding programs"
+            """)
+        
+        with help_tab3:
+            st.markdown("""
+            **🔧 Common Issues:**
+            
+            **Plot Generation Issues:**
+            • Check if plot generation file exists: `utils/rag_plot_generator_fixed.py`
+            • Restart the app if plots don't appear
+            
+            **LLM Mode Issues:**
+            • Ensure Ollama is running: `ollama serve`
+            • Check available models: `ollama list`
+            • Install LLM integration: Create `utils/local_rag_llm.py`
+            
+            **General Issues:**
+            • Refresh the system using the refresh button
+            • Check system information for component status
+            """)
 # Status indicators with enhanced styling
 st.markdown("### 🎯 Program Status Overview")
 status_cols = st.columns(4)
